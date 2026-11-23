@@ -19,7 +19,7 @@ def test_touch_creates_a_record_that_survives_reload(tmp_path):
     assert record.created_at and record.last_active_at
 
 
-def test_touch_refreshes_an_existing_agent(tmp_path, monkeypatch):
+def test_touch_refreshes_the_time_and_keeps_the_first_description(tmp_path, monkeypatch):
     times = iter(["2026-01-01T09:00:00+00:00", "2026-01-02T09:00:00+00:00"])
     monkeypatch.setattr(roster_module, "_utc_now_iso", lambda: next(times))
     roster = AgentRoster(tmp_path / "roster.json")
@@ -30,7 +30,16 @@ def test_touch_refreshes_an_existing_agent(tmp_path, monkeypatch):
     assert len(roster.get_agents()) == 1
     assert record.created_at == "2026-01-01T09:00:00+00:00"
     assert record.last_active_at == "2026-01-02T09:00:00+00:00"
-    assert record.description == "Move the lunch to Saturday"
+    assert record.description == "Draft a lunch invite"  # what the agent was created for
+
+
+def test_an_agent_from_the_names_only_roster_gets_a_description(tmp_path):
+    path = tmp_path / "roster.json"
+    path.write_text(json.dumps(["Gym Reminder"]))
+
+    record = AgentRoster(path).touch("Gym Reminder", "Remind the user to go to the gym at 7am")
+
+    assert record.description == "Remind the user to go to the gym at 7am"
 
 
 def test_description_is_flattened_and_capped(tmp_path):

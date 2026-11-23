@@ -42,3 +42,15 @@ def test_old_agent_is_listed_when_the_message_mentions_it(tmp_path, monkeypatch)
 
     assert 'name="Email to Alice"' in prompt_for("Did Alice reply about lunch?")
     assert 'name="Email to Alice"' not in prompt_for("Remind me to call mom")
+
+
+def test_a_short_follow_up_does_not_hide_what_the_agent_is_for(tmp_path, monkeypatch):
+    roster = AgentRoster(tmp_path / "roster.json")
+    roster.touch("Email to Priya", "Email Priya to confirm the venue deposit")
+    roster.touch("Email to Priya", "Send the email")  # follow-ups are often this short
+    for i in range(50):
+        roster.touch(f"Task agent {i}", f"Do task number {i}")
+    _use_roster(roster, monkeypatch)
+
+    block = interaction_agent._render_active_agents("Any update on the venue deposit?")
+    assert 'name="Email to Priya"' in block

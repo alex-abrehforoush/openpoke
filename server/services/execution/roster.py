@@ -11,7 +11,7 @@ from typing import Optional
 from ...logging_config import logger
 from .log_store import _slugify
 
-# Enough of the latest instructions to say what the agent is working on.
+# Enough of the first instructions to say what the agent is for.
 DESCRIPTION_MAX_CHARS = 150
 
 
@@ -20,7 +20,7 @@ class AgentRecord:
     """What the roster knows about one execution agent."""
 
     name: str
-    description: str = ""  # latest instructions, shortened
+    description: str = ""  # first instructions, shortened
     created_at: str = ""  # ISO 8601, UTC
     last_active_at: str = ""  # ISO 8601, UTC; "" sorts as oldest
 
@@ -108,13 +108,18 @@ class AgentRoster:
         return next((r for r in self._agents if _slugify(r.name) == key), None)
 
     def touch(self, agent_name: str, instructions: str) -> AgentRecord:
-        """Record that the agent just received instructions, creating it if new."""
+        """Record that the agent just received instructions, creating it if new.
+
+        The description stays the instructions the agent was first given. Later
+        ones are often just "send it" and would hide what the agent is for.
+        """
         now = _utc_now_iso()
         record = self.find(agent_name)
         if record is None:
             record = AgentRecord(name=agent_name, created_at=now)
             self._agents.append(record)
-        record.description = " ".join(instructions.split())[:DESCRIPTION_MAX_CHARS]
+        if not record.description:  # a new agent, or one from the names-only roster.json
+            record.description = " ".join(instructions.split())[:DESCRIPTION_MAX_CHARS]
         record.last_active_at = now
         self.save()
         return record
