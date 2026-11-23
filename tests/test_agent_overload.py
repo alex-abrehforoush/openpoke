@@ -14,7 +14,7 @@ from server.services.execution.roster import AgentRoster
 def _rendered_agent_count(roster_path, total_agents, monkeypatch) -> int:
     roster = AgentRoster(roster_path)
     for i in range(total_agents):
-        roster.add_agent(f"Task agent {i}")
+        roster.touch(f"Task agent {i}", f"Do task number {i}")
     monkeypatch.setattr(interaction_agent, "get_agent_roster", lambda: roster)
     return interaction_agent._render_active_agents().count("<agent ")
 

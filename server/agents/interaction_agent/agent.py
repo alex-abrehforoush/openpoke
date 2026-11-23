@@ -51,8 +51,8 @@ def _render_active_agents() -> str:
         return "None"
 
     rendered: List[str] = []
-    for agent_name in agents:
-        name = escape(agent_name or "agent", quote=True)
+    for record in agents:
+        name = escape(record.name or "agent", quote=True)
         rendered.append(f'<agent name="{name}" />')
 
     return "\n".join(rendered)
