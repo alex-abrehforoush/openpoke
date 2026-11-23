@@ -26,7 +26,10 @@ class AgentRecord:
 
 
 def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    # Microseconds keep agents touched in the same second (one turn fanning out
+    # to several agents) in the order they were used. Same format everywhere,
+    # so comparing the strings compares the times.
+    return datetime.now(timezone.utc).isoformat(timespec="microseconds")
 
 
 def _record_from_json(item: object) -> Optional[AgentRecord]:
