@@ -26,11 +26,14 @@ class ExecutionAgentRuntime:
     """Manages the execution of a single agent request."""
 
     MAX_TOOL_ITERATIONS = 8
+    # Past requests (with their actions and results) kept in the system prompt.
+    # Reused and trigger-driven agents would otherwise grow it forever.
+    HISTORY_REQUEST_LIMIT = 10
 
     # Initialize execution agent runtime with settings, tools, and agent instance
     def __init__(self, agent_name: str):
         settings = get_settings()
-        self.agent = ExecutionAgent(agent_name)
+        self.agent = ExecutionAgent(agent_name, conversation_limit=self.HISTORY_REQUEST_LIMIT)
         self.api_key = settings.openrouter_api_key
         self.model = settings.execution_agent_model
         self.tool_registry = get_tool_registry(agent_name=agent_name)
