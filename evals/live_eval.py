@@ -30,7 +30,9 @@ from server.services.execution.roster import AgentRecord
 from .dataset import CASES, Case, build_roster
 from .harness import UPSTREAM_COMMIT, VARIANTS, interaction_message, resolve_agent
 
-DEFAULT_MODEL = "google/gemma-4-31b-it:free"
+# The model of the committed run, so re-running re-scores the cache with no key.
+# (google/gemma-4-31b-it:free was rate-limited upstream when I ran it.)
+DEFAULT_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free"
 ROSTER_SIZE = 300
 MAX_CALLS = 45  # hard cap per run; the free tier allows 50 requests a day
 SECONDS_BETWEEN_CALLS = 3.5  # the free tier allows 20 requests a minute

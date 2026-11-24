@@ -10,7 +10,7 @@ This fork fixes OpenPoke's **agent overload** problem, adds tests and evaluators
 |---|---|
 | **Problem** | Every execution agent ever created is listed, by name only, in every interaction-agent request, and the list only grows. Near-duplicate names add more agents, and each execution agent's own prompt carries its entire history. |
 | **Fix** | The interaction agent sees at most 10 agents: the 5 used most recently, plus up to 5 older ones whose name or description shares words with the current message, each with a short description and when it was last used. Agents that aren't listed still exist and are reused by name. Near-duplicate names map to the existing agent, and each execution agent sees only its last 10 requests. |
-| **Evidence** | Offline eval at 300 agents: the agent list drops from ~2,531 to ~293 tokens, and the right agent is still listed for 10/10 recent and keyword callbacks. Near-duplicate names reuse the existing agent 7/10 times (0/10 before). Paraphrased callbacks are missed (0/4); that's the main known limit. |
+| **Evidence** | Offline eval at 300 agents: the agent list drops from ~2,531 to ~293 tokens, and the right agent is still listed for 10/10 recent and keyword callbacks. Near-duplicate names reuse the existing agent 7/10 times (0/10 before). Live eval (free Nemotron 3 Ultra, 300 agents): 40% fewer prompt tokens per call (5,978 → 3,569) and the same routing on recent, keyword and new-task cases (16/16). But all 4 paraphrased callbacks were missed (3 duplicates, 1 wrong agent), where the full list got them right. On this model the benefit is a bounded prompt, not better routing. |
 | **Tests** | 37 pytest tests, about 2 seconds, with network access blocked. |
 
 One commit per step, on branch `fix/agent-overload`:
@@ -55,7 +55,8 @@ The explainer's "Execution Agent Overload" section names it: execution agents "p
 - **The numbers are judgment calls, kept as named constants.** 5 + 5 agents comes to about 300 tokens. Ten past requests are enough for an agent to continue a thread. 150 characters is about one sentence of instructions. The offline eval makes other values quick to try.
 
 ### Known limits (measured)
-- **Paraphrased callbacks are missed.** "When are my teeth getting cleaned?" shares no word with the "Dentist Appointment" agent ("…book a cleaning"), so that agent isn't listed (0/4 in the offline eval). The model can still reach it if it picks the same name, or if the name appears in the conversation history.
+- **Paraphrased callbacks are missed.** "When are my teeth getting cleaned?" shares no word with the "Dentist Appointment" agent ("…book a cleaning"), so that agent isn't listed (0/4 in the offline eval). In the live eval, all 4 paraphrased callbacks went wrong (3 duplicates, 1 wrong agent), while the full list got all 4 right. The model can still reach such an agent if it picks the same name, or if the name appears in the conversation history.
+- **One shared word is enough to list an older agent,** and that can put the wrong one in front of the model. In the live eval, "Did that job I was offered say how long I have to decide?" listed "Recruiter Follow-up" only because both contain "say", and the model sent the question there.
 - **With few agents, the list is slightly bigger than before:** about 265 vs 212 tokens at 25 agents, because descriptions are included. The two cross at around 30–35 agents.
 - **Name variants that use different words still create a new agent,** for example "Email Priya" vs "Email to Priya" (3 of the 10 variants in the eval).
 
@@ -67,7 +68,7 @@ The explainer's "Execution Agent Overload" section names it: execution agents "p
    - It needs a fallback when a run fails or times out.
    - It can't be tested deterministically.
    - A summary written while reading untrusted email would be shown to the interaction agent on every later turn, which is a lasting prompt-injection risk.
-4. **Embeddings for paraphrases,** if the live eval shows those misses matter in practice.
+4. **Better recall for paraphrases:** the live eval shows these misses happen. The explainer's "semantic search over agent descriptions" (embeddings) is the direct fix, at the cost of an embedding model and its latency.
 
 ## 3. How I tested it
 
@@ -133,7 +134,7 @@ Near-duplicate names that reuse the existing agent: 0/10 for the baseline, 7/10 
 - **Paraphrases** are the known miss.
 
 ### Live eval: what the model actually does
-This eval is opt-in and runs only on free models. Command: `.venv/bin/python -m evals.live_eval` (default model `google/gemma-4-31b-it:free`; change it with `--model`; needs `OPENROUTER_API_KEY` in `.env`).
+This eval is opt-in and runs only on free models. Command: `.venv/bin/python -m evals.live_eval` (default model `nvidia/nemotron-3-ultra-550b-a55b:free`; change it with `--model`; needs `OPENROUTER_API_KEY` in `.env` only for answers that aren't already cached).
 
 **How it works:**
 - **One call per case.** Each case sends the interaction agent's real request (system prompt, history, agent list, message) with a 300-agent roster, at temperature 0. The model is required to call `send_message_to_agent`. That keeps each case to one call and makes the answer a name, so this eval measures routing, not whether the model would delegate at all.
@@ -150,7 +151,21 @@ During a run, it:
 - caps a run at 45 calls (the free tier allows 50 a day) and spaces calls 3.5 seconds apart;
 - caches every response in `evals/results/live_cache.json`, so re-runs send nothing and the results can be re-scored without a key.
 
-**Results:** _not run yet at the time of writing._
+**Results:** `nvidia/nemotron-3-ultra-550b-a55b:free`, 300-agent roster, 20 cases, 40 calls, $0.00 spent (checked before and after). The per-case table is in [evals/results/live_results.md](evals/results/live_results.md).
+
+| Version | Recent | Keyword | Paraphrase | New task | Correct | Duplicates | Wrong agent | Prompt tokens per call (mean) |
+|---|---|---|---|---|---|---|---|---|
+| baseline | 4/4 | 6/6 | 4/4 | 6/6 | 20/20 | 0 | 0 | 5,978 |
+| fixed | 4/4 | 6/6 | 0/4 | 6/6 | 16/20 | 3 | 1 | 3,569 |
+
+**What it shows:**
+- **Prompt size.** The fix made each interaction-agent call 2,409 tokens (40%) smaller at 300 agents. That's close to the offline estimate (~2,240 tokens) from the agent list's size. The saving grows with every agent the user creates, and applies to each of the up to 8 model calls in a turn.
+- **Routing.** It didn't improve; it got worse on paraphrases. This model routed all 20 cases correctly from a 300-name list, so at this size the long list didn't confuse it. The fix matched it on recent follow-ups, keyword callbacks and new tasks, and missed all 4 paraphrased callbacks:
+  - 3 duplicates, for example a new "Dental Appointment Check" instead of the existing "Dentist Appointment";
+  - 1 wrong agent: the "say" case above, the worse failure, because the follow-up goes to an agent with the wrong context.
+- **Conclusion.** On this evidence the fix's benefit is a smaller prompt that stays bounded, not better routing, and its cost is paraphrased callbacks. I didn't find the roster size at which the full list starts to hurt routing. That would need larger rosters and more requests than the free tier's 50 a day.
+
+**Note on the model:** I planned to use `google/gemma-4-31b-it:free`, but Google's free endpoint was rate-limited upstream at run time. It rejected both attempts, and my quota was unaffected. Nvidia's free Nemotron 3 Ultra was the largest free alternative with full uptime. It's now the default, so `python -m evals.live_eval` re-scores the committed cache without a key.
 
 ## 5. Other problems I found
 
