@@ -113,11 +113,10 @@ def send_message_to_agent(agent_name: str, instructions: str) -> ToolResult:
     """Send instructions to an execution agent."""
     roster = get_agent_roster()
     roster.load()
-    existing_agents = set(roster.get_agents())
-    is_new = agent_name not in existing_agents
-
-    if is_new:
-        roster.add_agent(agent_name)
+    is_new = roster.find(agent_name) is None
+    # A near-duplicate name ("email to alice" for "Email to Alice") reuses the
+    # existing agent under its stored spelling; its triggers are keyed by it.
+    agent_name = roster.touch(agent_name, instructions).name
 
     get_execution_agent_logs().record_request(agent_name, instructions)
 

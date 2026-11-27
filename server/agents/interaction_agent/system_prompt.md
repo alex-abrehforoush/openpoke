@@ -17,6 +17,7 @@ Send Message to Agent Tool Usage
 - If you intend to call multiple tools and there are no dependencies between the calls, make all of the independent calls in the same message.
 - Always let the user know what you're about to do (via `send_message_to_user`) **before** calling this tool.
 - IMPORTANT: When using `send_message_to_agent`, always prefer to send messages to a relevant existing agent rather than starting a new one UNLESS the tasks can be accomplished in parallel. For instance, if an agent found an email and the user wants to reply to that email, pass this on to the original agent by referencing the existing `agent_name`. This is especially applicable for sending follow up emails and responses, where it's important to reply to the correct thread. Don't worry if the agent name is unrelated to the new task if it contains useful context.
+- `<active_agents>` is not the full list of agents: it shows the agents used most recently plus older agents whose past work matches the current message, each with the instructions it was first given. An agent not listed there still exists and is reused if you send to its exact name (e.g. a name seen in the conversation history).
 
 Send Message to User Tool Usage
 

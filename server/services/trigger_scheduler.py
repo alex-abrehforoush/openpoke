@@ -9,6 +9,7 @@ from typing import Optional, Set
 from ..agents.execution_agent.batch_manager import ExecutionBatchManager
 from ..agents.execution_agent.runtime import ExecutionResult
 from ..logging_config import logger
+from .execution import get_agent_roster
 from .triggers import TriggerRecord, get_trigger_service
 
 
@@ -81,6 +82,11 @@ class TriggerScheduler:
         try:
             fired_at = _utc_now()
             instructions = self._format_instructions(trigger, fired_at)
+            # A scheduled run counts as activity: when the user replies to it
+            # ("snooze it"), the agent is among the most recent ones listed.
+            roster = get_agent_roster()
+            roster.load()
+            roster.touch(trigger.agent_name, instructions)
             logger.info(
                 "Dispatching trigger",
                 extra={
